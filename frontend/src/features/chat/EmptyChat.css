@@ -1,0 +1,222 @@
+.empty-chat-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+    background-color: #0f1115;
+    font-family: 'Inter', sans-serif;
+    color: white;
+    position: relative;
+    overflow: hidden;
+}
+
+.empty-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.2rem 1.5rem;
+    z-index: 10;
+}
+
+.empty-header h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.5px;
+}
+
+.settings-button {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 0.5rem;
+    transition: transform 0.2s;
+}
+
+.settings-button:hover {
+    transform: rotate(45deg);
+}
+
+.empty-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 0 2rem;
+    padding-bottom: 80px;
+    /* Space for bottom nav */
+    overflow-y: auto;
+}
+
+/* 3D Artwork Container */
+.artwork-container {
+    width: 240px;
+    height: 240px;
+    background: linear-gradient(135deg, #E67E74 0%, #F0A08C 100%);
+    border-radius: 32px;
+    margin-bottom: 1.5rem;
+    position: relative;
+    box-shadow:
+        0 20px 40px -12px rgba(230, 126, 116, 0.3),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Floating Bubbles Effect */
+.bubble {
+    position: absolute;
+    background: #fff;
+    border-radius: 20px;
+    box-shadow:
+        0 10px 20px rgba(0, 0, 0, 0.1),
+        0 4px 6px rgba(0, 0, 0, 0.05),
+        inset 0 -4px 4px rgba(0, 0, 0, 0.05);
+    /* 3D depth */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: float 6s ease-in-out infinite;
+}
+
+/* Main huge bubble */
+.bubble-main {
+    width: 120px;
+    height: 90px;
+    background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
+    border-bottom-left-radius: 4px;
+    /* chat bubble tail look */
+    z-index: 2;
+    top: 45%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.bubble-main::after {
+    content: '';
+    width: 40px;
+    height: 4px;
+    background: #e2e8f0;
+    border-radius: 2px;
+    box-shadow: 0 10px 0 #e2e8f0;
+}
+
+/* Secondary bubbles */
+.bubble-1 {
+    width: 60px;
+    height: 45px;
+    background: #93C5FD;
+    /* Blueish */
+    top: 25%;
+    right: 20%;
+    animation-delay: 1s;
+    border-bottom-right-radius: 4px;
+}
+
+.bubble-2 {
+    width: 50px;
+    height: 40px;
+    background: #FCA5A5;
+    /* Reddish */
+    bottom: 25%;
+    left: 20%;
+    animation-delay: 2s;
+    border-top-left-radius: 4px;
+}
+
+.bubble-3 {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    /* circle */
+    background: #86EFAC;
+    /* Greenish */
+    top: 20%;
+    left: 25%;
+    animation-delay: 0.5s;
+}
+
+@keyframes float {
+
+    0%,
+    100% {
+        transform: translateY(0) translate(-50%, -50%);
+    }
+
+    50% {
+        transform: translateY(-15px) translate(-50%, -50%);
+    }
+}
+
+/* Special override for relative positioning animation */
+.bubble-1,
+.bubble-2,
+.bubble-3 {
+    transform: none;
+    animation: floatSimple 5s ease-in-out infinite;
+}
+
+@keyframes floatSimple {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+
+.empty-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+    letter-spacing: -0.5px;
+}
+
+.empty-subtitle {
+    color: #94a3b8;
+    font-size: 0.95rem;
+    max-width: 300px;
+    line-height: 1.5;
+    margin-bottom: 2rem;
+    font-weight: 400;
+}
+
+.start-chat-btn {
+    background: #3b82f6;
+    /* Solid vivid blue */
+    color: white;
+    border: none;
+    padding: 0.9rem 2rem;
+    border-radius: 14px;
+    font-size: 1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    cursor: pointer;
+    box-shadow:
+        0 0 0 3px rgba(59, 130, 246, 0.15),
+        /* Outer glow ring */
+        0 8px 16px -4px rgba(59, 130, 246, 0.35);
+    transition: all 0.2s;
+}
+
+.start-chat-btn:hover {
+    transform: translateY(-2px) scale(1.02);
+    background: #2563eb;
+    box-shadow:
+        0 0 0 4px rgba(59, 130, 246, 0.25),
+        0 12px 24px -4px rgba(59, 130, 246, 0.45);
+}
+
+.start-chat-btn:active {
+    transform: scale(0.98);
+}
