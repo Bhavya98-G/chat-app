@@ -88,10 +88,8 @@ If you prefer to run services locally:
 
 ### Backend
 1. Navigate to `backend/`.
-2. Create virtual env: `python -m venv .venv`
-3. Activate env: `.venv\Scripts\activate` (Windows)
-4. Install dependencies: `pip install -r pyproject.toml` (or use `uv`)
-5. Run server: `uvicorn main:app --reload`
+2. Install dependencies: `uv sync`
+3. Run server: `uv run uvicorn main:app --reload`
 
 ### Frontend
 1. Navigate to `frontend/`.
