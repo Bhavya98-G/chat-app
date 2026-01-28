@@ -18,6 +18,7 @@ A modern, full-stack real-time chat application built with **FastAPI**, **React*
 - **Styling**: Vanilla CSS (Modern CSS3)
 - **Icons**: Lucide React
 - **State Management**: React Hooks (useState, useEffect, useContext)
+- **Development Method**: Built with the help of AI through **Vibe Coding**
 
 ### Backend
 - **Framework**: FastAPI (Python)
