@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_
-from core.database import get_db
-from models.sql_tables import Message
+from app.core.database import get_db
+from app.models.sql_tables import Message
 from typing import List
 
 router = APIRouter(tags=["messages"], prefix="/messages")

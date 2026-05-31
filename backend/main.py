@@ -1,10 +1,12 @@
 from fastapi import FastAPI
-from core.database import engine
-from models.sql_tables import Base, User
-from authentication.registration import router as registration_router
-from app.connection import router as connection_router
-from app.message import router as message_router
-from app.person import router as user_router
+from app.core.database import engine
+from app.models.sql_tables import Base, User
+from app.routes.auth_routers import router as auth_router
+from app.routes.general_route import router as genral_router
+from app.routes.connection import router as connection_router
+from app.routes.message import router as message_router
+from app.routes.person import router as user_router
+from app.routes.admin_route import router as admin_router
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -19,10 +21,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.include_router(registration_router)
+
+app.include_router(auth_router)
+app.include_router(genral_router)
+app.include_router(admin_router)
 app.include_router(connection_router)
 app.include_router(message_router)
 app.include_router(user_router) 
+
 
 @app.on_event("startup")
 async def init_tables():
@@ -52,9 +58,4 @@ async def read_root():
 async def health_check():
     return {"status": "ok"}
 
-@app.post("/clear-mysql")
-async def clear_mysql():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
-    return {"message": "Database tables cleared successfully!"}
+

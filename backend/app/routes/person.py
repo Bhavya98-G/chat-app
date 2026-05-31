@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List
-from models.sql_tables import User
-from schema.pydantic_model import UserOut
-from core.database import get_db
-from .chat_user import get_chat_users
+from app.models.sql_tables import User
+from app.schema.pydantic_model import UserOut
+from app.core.database import get_db
+from app.routes.chat_user import get_chat_users
 
 router = APIRouter(tags=["user_lists"], prefix="/user_lists")
 
@@ -25,5 +25,3 @@ async def get_chat_user(username: str, db: AsyncSession = Depends(get_db)):
         return chat_users
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-
-

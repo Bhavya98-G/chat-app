@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import case, func, or_
 from typing import List
-from models.sql_tables import User, Message
+from app.models.sql_tables import User, Message
 
 async def get_chat_users(username: str, db: AsyncSession):
     # 1. Get current user ID

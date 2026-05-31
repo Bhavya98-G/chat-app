@@ -3,6 +3,7 @@ from typing import TypedDict, Annotated, List
 from langgraph.graph import StateGraph, START,END
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage 
+from langgraph.prebuilt import ToolNode
 from .tools import get_history_with_contact, get_message_to_user
 import os
 
@@ -20,13 +21,25 @@ llm = ChatGroq(
 
 tools = [get_history_with_contact, get_message_to_user]
 llm_with_tools = llm.bind_tools(tools)
+tool_node = ToolNode(tools)
 
 def call_model(state: AgentState):
     response = llm_with_tools.invoke(state["messages"])
     return {"messages": [response]}
 
+def should_continue(state: AgentState):
+    messages = state["messages"]
+    last_message = messages[-1]
+    if last_message.tool_calls:
+        return "tools"
+    return END
+
 workflow = StateGraph(AgentState)
 workflow.add_node("agent", call_model)
+workflow.add_node("tools", tool_node)
 
 workflow.add_edge(START, "agent")
+workflow.add_conditional_edges("agent", should_continue)
+workflow.add_edge("tools", "agent")
+
 bot_agent = workflow.compile()
