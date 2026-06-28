@@ -12,20 +12,24 @@ class CreateContactResponse(BaseModel):
 
 class GetAllContact(BaseModel):
     contact_id : int
-    nickname : str
+    nickname : str | None = None
+    first_name : str
+    last_name : str | None = None
+    is_blocked : bool
 
 class GetContact(BaseModel):
-    nickname : str | None
+    nickname : str | None = None
     first_name : str
-    last_name : str | None
-    email: EmailStr
-    phone_number : str | None
-    bio : str | None
+    last_name : str | None = None
+    email : EmailStr
+    phone_number : str | None = None
+    bio : str | None = None
     created_at : datetime
+    is_blocked : bool = False
 
 class ChangeNickName(BaseModel):
     contact_id : int
-    nickname : str
+    nickname : str | None = None
 
 class BlockPerson(BaseModel):
     contact_id : int
@@ -36,17 +40,6 @@ class DeleteContact(BaseModel):
 
 class RequestPhoneNumber(BaseModel):
     phone_number : str
-
-    @field_validator("phone_number")
-    @classmethod
-    def validate_phone(cls, v: str) -> str:
-        try:
-            parsed = phonenumbers.parse(v, None)
-        except phonenumbers.NumberParseException:
-            raise ValueError("Invalid phone numer") 
-        if not phonenumbers.is_valid_number(parsed):
-            raise ValueError("Invalid phone number")
-        return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
 
 class ResponsePhoneNumber(BaseModel):
     phone_number : str
@@ -59,10 +52,6 @@ class RequestBio(BaseModel):
 
 class ResponseBio(BaseModel):
     bio : str
-  
+
 class DeleteBio(BaseModel):
-    user_id : int   
-
-    
-
-    
+    user_id : int

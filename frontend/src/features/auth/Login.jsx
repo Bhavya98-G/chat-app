@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import api from '../../services/api';
 import { Eye, EyeOff } from 'lucide-react';
-import { STORAGE_KEYS, API_ENDPOINTS } from '../../constants/config';
+import { useAuth } from '../../context/AuthContext';
 import './Login.css';
 
-const Login = ({ onLogin, onSwitchToSignup }) => {
-    const [username, setUsername] = useState('');
+const Login = ({ onSwitchToSignup }) => {
+    const { login } = useAuth();
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
@@ -17,17 +17,10 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
         setError('');
 
         try {
-            const formData = new FormData();
-            formData.append('username', username);
-            formData.append('password', password);
-
-            const response = await api.post(API_ENDPOINTS.AUTH.LOGIN, formData);
-            localStorage.setItem(STORAGE_KEYS.TOKEN, response.data.access_token);
-            localStorage.setItem(STORAGE_KEYS.USERNAME, username);
-            onLogin(username);
+            await login(email, password);
+            // AuthContext flips status; App leaves this screen.
         } catch (err) {
-            console.error(err);
-            setError('Invalid username or password');
+            setError(err.message || 'Login failed');
         } finally {
             setLoading(false);
         }
@@ -48,11 +41,11 @@ const Login = ({ onLogin, onSwitchToSignup }) => {
                 <form onSubmit={handleSubmit} style={{ width: '100%' }}>
                     <div className="form-group">
                         <input
-                            type="text"
+                            type="email"
                             className="input-field"
-                            placeholder="Username"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
+                            placeholder="Email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
                             required
                         />
                     </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { API_BASE_URL, API_ENDPOINTS } from '../constants/config';
 
-const useServerHealth = (url = 'http://127.0.0.1:8000/health', intervalMs = 3000) => {
+const useServerHealth = (url = `${API_BASE_URL}${API_ENDPOINTS.HEALTH}`, intervalMs = 3000) => {
     const [isServerUp, setIsServerUp] = useState(true);
 
     useEffect(() => {

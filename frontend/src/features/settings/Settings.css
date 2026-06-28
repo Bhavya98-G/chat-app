@@ -1,0 +1,403 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+/* Settings — uses the app's shared dark palette (#0f1115 bg, #1e293b surfaces,
+   #3b82f6 accent) so it matches Chat/Contacts. Shared base classes
+   (.settings-screen, .settings-header, .settings-body, form fields) are also
+   used by EditProfile, so it inherits the same look. */
+.settings-screen {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+    background: #0f1115;
+    color: #e2e8f0;
+    font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+}
+
+.settings-header {
+    height: 64px;
+    flex-shrink: 0;
+    background: #13161c;
+    border-bottom: 1px solid #1e293b;
+}
+
+/* Header bar: full-width with the back button + title at the left edge,
+   matching the Chat/Contacts app bars. */
+.settings-bar-inner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 100%;
+    padding: 0 24px;
+    box-sizing: border-box;
+}
+
+.settings-header h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    color: #fff;
+}
+
+.back-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: none;
+    border: none;
+    border-radius: 9999px;
+    color: #e2e8f0;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.back-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.settings-body {
+    flex: 1;
+    overflow-y: auto;
+}
+
+/* Full-width header/nav with content centered in a desktop-friendly column;
+   the scrollbar stays at the viewport edge (not mid-screen). */
+.settings-content {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 32px 24px 88px;
+    box-sizing: border-box;
+}
+
+/* --- Profile preview --- */
+.settings-profile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 40px;
+}
+
+.settings-avatar {
+    position: relative;
+    width: 96px;
+    height: 96px;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    margin-bottom: 16px;
+}
+
+.settings-avatar img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    border-radius: 50%;
+    border: 4px solid #0f1115;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+    transition: transform 0.3s;
+}
+
+.settings-avatar:hover img {
+    transform: scale(1.05);
+}
+
+.settings-avatar-add {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #3b82f6;
+    color: #fff;
+    border-radius: 50%;
+    border: 2px solid #0f1115;
+}
+
+.settings-profile-name {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    color: #fff;
+}
+
+.settings-profile-email {
+    margin: 4px 0 0;
+    font-size: 14px;
+    color: #94a3b8;
+}
+
+/* --- Options list --- */
+.settings-options {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.settings-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 56px;
+    padding: 8px 16px;
+    background: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
+}
+
+.settings-card:hover {
+    border-color: rgba(59, 130, 246, 0.5);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+
+.settings-card-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.settings-card-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    color: #94a3b8;
+    flex-shrink: 0;
+}
+
+.settings-card-icon.accent {
+    background: rgba(59, 130, 246, 0.15);
+    color: #3b82f6;
+}
+
+.settings-card-label {
+    font-size: 16px;
+    font-weight: 500;
+    color: #e2e8f0;
+}
+
+.settings-card-chevron {
+    color: #64748b;
+    flex-shrink: 0;
+}
+
+.settings-divider {
+    height: 1px;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.08);
+    margin: 8px 0;
+}
+
+.settings-card.danger {
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.settings-card.danger:hover {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.4);
+}
+
+.settings-card-icon.danger {
+    background: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
+}
+
+.settings-card.danger .settings-card-label {
+    color: #fca5a5;
+    font-weight: 700;
+}
+
+.settings-card-power {
+    color: rgba(239, 68, 68, 0.7);
+    flex-shrink: 0;
+}
+
+/* --- Support cards --- */
+.settings-support {
+    margin-top: 40px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.settings-support-card {
+    position: relative;
+    overflow: hidden;
+    height: 160px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+    background: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    color: #e2e8f0;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+    transition: transform 0.2s;
+}
+
+.settings-support-card:hover {
+    transform: translateY(-2px);
+}
+
+.settings-support-card svg {
+    color: #94a3b8;
+}
+
+.settings-support-card.help {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.3);
+}
+
+.settings-support-card.help svg {
+    color: #93c5fd;
+}
+
+.settings-support-top h3 {
+    margin: 8px 0 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+}
+
+.settings-support-card p {
+    margin: 0;
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+.settings-support-card.help p {
+    color: #93c5fd;
+}
+
+/* --- Form fields (Edit Profile, shared) --- */
+.settings-section {
+    margin-bottom: 28px;
+}
+
+.settings-label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #e2e8f0;
+}
+
+.settings-textarea,
+.settings-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px 14px;
+    background: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    color: #fff;
+    font-size: 15px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.settings-textarea::placeholder,
+.settings-input::placeholder {
+    color: #64748b;
+}
+
+.settings-textarea:focus,
+.settings-input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+}
+
+.settings-row-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.settings-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 18px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: #e2e8f0;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+}
+
+.settings-btn.primary {
+    background: #3b82f6;
+    color: #fff;
+    border-color: #3b82f6;
+}
+
+.settings-btn.primary:hover:not(:disabled) {
+    background: #2563eb;
+    border-color: #2563eb;
+}
+
+.settings-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.settings-hint {
+    color: #94a3b8;
+    font-size: 12px;
+    margin-top: 8px;
+}
+
+.settings-message {
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 14px;
+}
+
+.settings-message.ok {
+    background: rgba(34, 197, 94, 0.15);
+    color: #86efac;
+}
+
+.settings-message.err {
+    background: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
+}
+
+.settings-body .spinner {
+    width: 36px;
+    height: 36px;
+    margin: 40px auto;
+    border: 3px solid rgba(255, 255, 255, 0.15);
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: settings-spin 0.8s linear infinite;
+}
+
+@keyframes settings-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

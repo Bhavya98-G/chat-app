@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     ArrowLeft,
     Video,
@@ -8,27 +8,56 @@ import {
     Send,
     Check,
     CheckCheck,
-    ArrowDown
+    ArrowDown,
+    MoreVertical,
+    Edit2,
+    Ban,
+    Trash2,
+    Mail,
+    Calendar,
+    X
 } from 'lucide-react';
-import { API_BASE_URL, API_ENDPOINTS, STORAGE_KEYS } from '../../constants/config';
+import { useAuth } from '../../context/AuthContext';
+import { useSocketStatus, useSocketEvent } from '../../hooks/useChatSocket';
+import socket from '../../services/socketService';
+import { openConversation, getMessages } from '../../services/chatService';
+import { getContact, changeNickname, setBlocked, deleteContact } from '../../services/contactService';
+import { formatTime } from '../../utils/helpers';
 import './Chat.css';
 
-const Chat = ({ username, selectedContact, onBack, onLogout, onMessageSent }) => {
-    const [messages, setMessages] = useState([]);
+const toUiMessage = (m) => ({
+    id: m.id,
+    senderId: m.sender_id,
+    content: m.content,
+    time: formatTime(m.created_at),
+    status: 'sent',
+});
+
+const Chat = ({ peer, onBack, onLogout, onMessageSent }) => {
+    const { user } = useAuth();
+    const [conversationId, setConversationId] = useState(null);
+    const [messages, setMessages] = useState([]); // [{ id, senderId, content, time, status }]
     const [input, setInput] = useState('');
-    const [currentUserId, setCurrentUserId] = useState(null);
-    const [initializing, setInitializing] = useState(true); // New state for user lookup
-    const [loadingMessages, setLoadingMessages] = useState(false); // Renamed for clarity
-    const [error, setError] = useState(null); // New state for errors
+    const [phase, setPhase] = useState('loading'); // 'loading' | 'ready' | 'error'
+    const [error, setError] = useState(null);
+    const [banner, setBanner] = useState(null); // transient socket-error banner
+    const [reloadKey, setReloadKey] = useState(0);
     const [isTyping, setIsTyping] = useState(false);
-    const [isOnline, setIsOnline] = useState(true);
-    const [isReconnecting, setIsReconnecting] = useState(false);
+    const [isOnline, setIsOnline] = useState(false); // unknown until a presence frame arrives
     const [showScrollButton, setShowScrollButton] = useState(false);
     const [hasNewMessage, setHasNewMessage] = useState(false);
-    const ws = useRef(null);
+    const [contactName, setContactName] = useState(peer.name);
+    const [contactInfo, setContactInfo] = useState(null); // { email, phone_number, bio, created_at, is_blocked, nickname }
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [showProfile, setShowProfile] = useState(false);
+    const [actionBusy, setActionBusy] = useState(false);
+    const socketStatus = useSocketStatus();
     const messagesEndRef = useRef(null);
     const messageListRef = useRef(null);
     const typingTimeoutRef = useRef(null);
+    const menuRef = useRef(null);
+    const blocked = !!contactInfo?.is_blocked;
+    const isBot = !!peer.isBot;
 
     const scrollToBottom = (smooth = true) => {
         messagesEndRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" });
@@ -55,7 +84,7 @@ const Chat = ({ username, selectedContact, onBack, onLogout, onMessageSent }) =>
             messageList.addEventListener('scroll', handleScroll);
             return () => messageList.removeEventListener('scroll', handleScroll);
         }
-    }, []);
+    }, [phase]);
 
     useEffect(() => {
         // Check if user is at bottom before new message
@@ -71,250 +100,202 @@ const Chat = ({ username, selectedContact, onBack, onLogout, onMessageSent }) =>
         }
     }, [messages]);
 
-    // Fetch current user ID
+    // Open (or create) the conversation, load history, mark read.
     useEffect(() => {
-        const fetchCurrentUser = async () => {
+        let cancelled = false;
+        (async () => {
             try {
-                setInitializing(true);
-                const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-                if (!token) {
-                    setError("No authentication token found");
-                    return;
+                setPhase('loading');
+                setError(null);
+                const convId = await openConversation(peer.id);
+                const history = await getMessages(convId);
+                if (cancelled) return;
+                setConversationId(convId);
+                setMessages(history.map(toUiMessage));
+                setPhase('ready');
+                socket.sendRead(convId);
+            } catch (err) {
+                if (!cancelled) {
+                    setError(err.message);
+                    setPhase('error');
                 }
-                // Pass a dummy username to get ALL users including current one to find ID
-                const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.USERS.GET_ALL('__lookup__')}`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch users: ${response.status}`);
-                }
-
-                const users = await response.json();
-                const currentUser = users.find(u => u.username === username);
-                if (currentUser) {
-                    setCurrentUserId(currentUser.id);
-                    setError(null);
-                } else {
-                    console.error("Current user not found in user list");
-                    setError("Could not verify user identity.");
-                }
-            } catch (error) {
-                console.error('Error fetching current user:', error);
-                setError("Failed to load user data. Please try again.");
-            } finally {
-                setInitializing(false);
             }
-        };
+        })();
+        return () => { cancelled = true; };
+    }, [peer.id, reloadKey]);
 
-        if (username) {
-            fetchCurrentUser();
-        } else {
-            console.error("No username provided to Chat component");
-            setInitializing(false);
+    // Load the contact's profile + blocked state for the header menu.
+    useEffect(() => {
+        setContactName(peer.name);
+        setMenuOpen(false);
+        setShowProfile(false);
+        // The bot isn't a saved contact — skip the contact lookup entirely.
+        if (peer.isBot) {
+            setContactInfo(null);
+            return undefined;
         }
-    }, [username]);
-
-    // Fetch chat history when contact is selected
-    useEffect(() => {
-        if (!currentUserId || !selectedContact) return;
-
-        const fetchHistory = async () => {
+        let cancelled = false;
+        (async () => {
             try {
-                setLoadingMessages(true);
-                const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-                const response = await fetch(
-                    `${API_BASE_URL}${API_ENDPOINTS.MESSAGES.GET_HISTORY(currentUserId, selectedContact.id)}`,
-                    {
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        }
-                    }
-                );
-
-                if (response.ok) {
-                    const data = await response.json();
-                    const formattedMessages = data.map(m => ({
-                        sender: m.sender_id === currentUserId ? 'Me' : selectedContact.username,
-                        message: m.content,
-                        time: new Date(m.timestamp).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit'
-                        }),
-                        type: m.sender_id === currentUserId ? 'outgoing' : 'incoming'
-                    }));
-                    setMessages(formattedMessages);
-                } else {
-                    console.error("Failed to fetch messages");
-                }
-            } catch (error) {
-                console.error('Error fetching chat history:', error);
-            } finally {
-                setLoadingMessages(false);
+                const info = await getContact(peer.id);
+                if (!cancelled) setContactInfo(info);
+            } catch {
+                if (!cancelled) setContactInfo(null);
             }
-        };
+        })();
+        return () => { cancelled = true; };
+    }, [peer.id, peer.name]);
 
-        fetchHistory();
-    }, [currentUserId, selectedContact]);
-
-    // WebSocket connection with auto-reconnect
+    // Close the header menu on outside click.
     useEffect(() => {
-        if (!currentUserId) return;
-
-        let reconnectTimeout;
-
-        const connectWS = () => {
-            const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-            const socketUrl = API_ENDPOINTS.WEBSOCKET.CONNECT(token);
-            ws.current = new WebSocket(socketUrl);
-
-            ws.current.onopen = () => {
-                console.log('Connected to WebSocket');
-                setIsReconnecting(false);
-            };
-
-            ws.current.onmessage = (event) => {
-                const message = JSON.parse(event.data);
-
-                // Handle presence status
-                if (message.type === 'presence' && message.user_id === selectedContact.id) {
-                    setIsOnline(message.status === 'online');
-                    return;
-                }
-
-                // Handle typing status
-                if (message.type === 'typing' && message.sender_id === selectedContact.id) {
-                    setIsTyping(message.is_typing);
-                    return;
-                }
-
-                // Only add message if it's from the current contact
-                if (message.sender_id === selectedContact.id || message.receiver_id === selectedContact.id) {
-                    setMessages((prev) => [...prev, {
-                        sender: message.sender_id === currentUserId ? 'Me' : selectedContact.username,
-                        message: message.message || message.content,
-                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                        type: message.sender_id === currentUserId ? 'outgoing' : 'incoming',
-                        status: message.sender_id === currentUserId ? 'sent' : null
-                    }]);
-                }
-            };
-
-            ws.current.onclose = () => {
-                console.log("WS Closed. Retrying in 3 seconds...");
-                setIsReconnecting(true);
-                reconnectTimeout = setTimeout(connectWS, 3000);
-            };
-
-            ws.current.onerror = (error) => {
-                console.error('WebSocket error:', error);
-                ws.current.close(); // Ensure close is triggered
-            };
+        if (!menuOpen) return undefined;
+        const onDocClick = (e) => {
+            if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
         };
+        document.addEventListener('mousedown', onDocClick);
+        return () => document.removeEventListener('mousedown', onDocClick);
+    }, [menuOpen]);
 
-        connectWS();
+    // ---- contact actions (header menu) ----
+    const handleRename = async () => {
+        setMenuOpen(false);
+        const next = window.prompt('Nickname', contactName);
+        if (next === null) return;
+        const trimmed = next.trim();
+        if (!trimmed) return;
+        try {
+            setActionBusy(true);
+            await changeNickname(peer.id, trimmed);
+            setContactName(trimmed);
+            setContactInfo((p) => (p ? { ...p, nickname: trimmed } : p));
+        } catch (err) {
+            setBanner(err.message);
+        } finally {
+            setActionBusy(false);
+        }
+    };
 
-        return () => {
-            if (ws.current) {
-                ws.current.onclose = null; // Prevent reconnect on unmount
-                ws.current.close();
-            }
-            if (reconnectTimeout) {
-                clearTimeout(reconnectTimeout);
-            }
-        };
-    }, [currentUserId, selectedContact]);
+    const handleBlockToggle = async () => {
+        setMenuOpen(false);
+        try {
+            setActionBusy(true);
+            await setBlocked(peer.id, !blocked);
+            setContactInfo((p) => (p ? { ...p, is_blocked: !blocked } : p));
+        } catch (err) {
+            setBanner(err.message);
+        } finally {
+            setActionBusy(false);
+        }
+    };
 
+    const handleRemove = async () => {
+        setMenuOpen(false);
+        if (!window.confirm(`Remove ${contactName} from contacts?`)) return;
+        try {
+            setActionBusy(true);
+            await deleteContact(peer.id);
+            onBack();
+        } catch (err) {
+            setBanner(err.message);
+            setActionBusy(false);
+        }
+    };
 
+    // ---- socket frames ----
+    const handleMessage = useCallback((frame) => {
+        if (frame.conversation_id !== conversationId) return;
+        setMessages((prev) => [...prev, {
+            id: frame.id,
+            senderId: frame.sender_id,
+            content: frame.content,
+            time: formatTime(frame.created_at),
+            status: 'sent',
+        }]);
+        if (frame.sender_id !== user.id) socket.sendRead(conversationId);
+    }, [conversationId, user.id]);
+    useSocketEvent('message', handleMessage);
 
+    const handleTyping = useCallback((frame) => {
+        if (frame.conversation_id === conversationId && frame.user_id === peer.id) {
+            setIsTyping(frame.is_typing);
+        }
+    }, [conversationId, peer.id]);
+    useSocketEvent('typing', handleTyping);
+
+    const handleRead = useCallback((frame) => {
+        if (frame.conversation_id === conversationId && frame.user_id === peer.id) {
+            setMessages((prev) => prev.map((m) => (
+                m.senderId === user.id ? { ...m, status: 'read' } : m
+            )));
+        }
+    }, [conversationId, peer.id, user.id]);
+    useSocketEvent('read', handleRead);
+
+    const handlePresence = useCallback((frame) => {
+        if (frame.user_id === peer.id) setIsOnline(frame.status === 'online');
+    }, [peer.id]);
+    useSocketEvent('presence', handlePresence);
+
+    const handleErrorFrame = useCallback((frame) => {
+        setBanner(frame.detail || 'Something went wrong');
+    }, []);
+    useSocketEvent('error', handleErrorFrame);
+
+    // transient banner auto-clears
+    useEffect(() => {
+        if (!banner) return undefined;
+        const t = setTimeout(() => setBanner(null), 4000);
+        return () => clearTimeout(t);
+    }, [banner]);
+
+    // ---- input / send ----
     const handleInputChange = (e) => {
         setInput(e.target.value);
+        if (!conversationId) return;
 
-        // Send "typing" status to WebSocket
-        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-            ws.current.send(JSON.stringify({
-                type: "typing",
-                receiver_id: selectedContact.id,
-                is_typing: e.target.value.length > 0
-            }));
+        socket.sendTyping(conversationId, e.target.value.length > 0);
 
-            // Clear previous timeout
-            if (typingTimeoutRef.current) {
-                clearTimeout(typingTimeoutRef.current);
-            }
-
+        clearTimeout(typingTimeoutRef.current);
+        if (e.target.value.length > 0) {
             // Stop typing indicator after 2 seconds of inactivity
-            if (e.target.value.length > 0) {
-                typingTimeoutRef.current = setTimeout(() => {
-                    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-                        ws.current.send(JSON.stringify({
-                            type: "typing",
-                            receiver_id: selectedContact.id,
-                            is_typing: false
-                        }));
-                    }
-                }, 2000);
-            }
+            typingTimeoutRef.current = setTimeout(() => {
+                socket.sendTyping(conversationId, false);
+            }, 2000);
         }
     };
 
     const sendMessage = () => {
-        if (ws.current && input.trim() && selectedContact) {
-            // Clear typing timeout
-            if (typingTimeoutRef.current) {
-                clearTimeout(typingTimeoutRef.current);
-            }
+        const text = input.trim();
+        if (!text || !conversationId) return;
 
-            // Send stop typing status
-            ws.current.send(JSON.stringify({
-                type: "typing",
-                receiver_id: selectedContact.id,
-                is_typing: false
-            }));
+        clearTimeout(typingTimeoutRef.current);
+        socket.sendTyping(conversationId, false);
 
-            const payload = {
-                receiver_id: selectedContact.id,
-                message: input
-            };
-            ws.current.send(JSON.stringify(payload));
-
-            setMessages((prev) => [...prev, {
-                sender: 'Me',
-                message: input,
-                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                type: 'outgoing',
-                status: 'sent' // Initial status
-            }]);
-
-            if (onMessageSent) {
-                onMessageSent();
-            }
-
-            setInput('');
-
-            // Simulate delivery after 1 second (in real app, this would come from backend)
-            setTimeout(() => {
-                setMessages((prev) => prev.map((msg, i) =>
-                    i === prev.length - 1 ? { ...msg, status: 'delivered' } : msg
-                ));
-            }, 1000);
+        const sent = socket.sendMessage(conversationId, text);
+        if (!sent) {
+            setBanner('Not connected — message not sent');
+            return;
         }
+        setInput('');
+        onMessageSent?.();
+        // No optimistic insert: the server echo (with DB id + timestamp) renders it.
     };
 
-    if (!selectedContact) {
+    if (!peer) {
         return <div className="chat-container">No contact selected</div>;
     }
 
     return (
         <div className="chat-container">
-            {/* Reconnection Toast */}
-            {isReconnecting && (
+            {/* Reconnection / error toast */}
+            {socketStatus === 'reconnecting' && (
                 <div className="connection-toast">
                     Reconnecting...
+                </div>
+            )}
+            {banner && (
+                <div className="connection-toast">
+                    {banner}
                 </div>
             )}
 
@@ -327,15 +308,15 @@ const Chat = ({ username, selectedContact, onBack, onLogout, onMessageSent }) =>
                     <div className="user-info">
                         <div className="avatar">
                             <img
-                                src={`https://i.pravatar.cc/150?u=${selectedContact.username}`}
-                                alt={selectedContact.username}
+                                src={`https://i.pravatar.cc/150?u=${peer.id}`}
+                                alt={contactName}
                             />
-                            <div className={`status-dot ${isOnline ? 'online' : 'offline'}`}></div>
+                            <div className={`status-dot ${(isBot || isOnline) ? 'online' : 'offline'}`}></div>
                         </div>
                         <div className="user-details">
-                            <h3>{selectedContact.username}</h3>
+                            <h3>{contactName}</h3>
                             <p className={`user-status ${isTyping ? 'typing' : ''}`}>
-                                {isTyping ? (
+                                {isBot ? 'AI assistant' : isTyping ? (
                                     <span className="typing-indicator-text">
                                         <span className="typing-dots">
                                             <span className="dot"></span>
@@ -343,7 +324,7 @@ const Chat = ({ username, selectedContact, onBack, onLogout, onMessageSent }) =>
                                             <span className="dot"></span>
                                         </span>
                                     </span>
-                                ) : (isOnline ? 'Online' : 'Last seen recently')}
+                                ) : (isOnline ? 'Online' : 'Offline')}
                             </p>
                         </div>
                     </div>
@@ -351,70 +332,138 @@ const Chat = ({ username, selectedContact, onBack, onLogout, onMessageSent }) =>
                 <div className="header-actions">
                     <button className="icon-button"><Video size={24} /></button>
                     <button className="icon-button"><Phone size={24} /></button>
+                    {/* Contact management is meaningless for the bot — hide it. */}
+                    {!isBot && (
+                        <div className="header-menu" ref={menuRef}>
+                            <button
+                                className="icon-button"
+                                onClick={() => setMenuOpen((o) => !o)}
+                                title="More"
+                            >
+                                <MoreVertical size={24} />
+                            </button>
+                            {menuOpen && (
+                                <div className="header-dropdown">
+                                    <button onClick={() => { setMenuOpen(false); setShowProfile(true); }}>
+                                        <Mail size={18} /> View profile
+                                    </button>
+                                    <button onClick={handleRename} disabled={actionBusy}>
+                                        <Edit2 size={18} /> Rename
+                                    </button>
+                                    <button onClick={handleBlockToggle} disabled={actionBusy}>
+                                        <Ban size={18} /> {blocked ? 'Unblock' : 'Block'}
+                                    </button>
+                                    <button className="danger" onClick={handleRemove} disabled={actionBusy}>
+                                        <Trash2 size={18} /> Remove
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </header>
 
+            {/* Profile modal */}
+            {showProfile && (
+                <div className="profile-overlay" onClick={() => setShowProfile(false)}>
+                    <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
+                        <header className="profile-modal-header">
+                            <h3>Profile</h3>
+                            <button className="icon-button" onClick={() => setShowProfile(false)} aria-label="Close">
+                                <X size={20} />
+                            </button>
+                        </header>
+                        <div className="profile-avatar">
+                            <img src={`https://i.pravatar.cc/150?u=${peer.id}`} alt={contactName} />
+                        </div>
+                        <h2 className="profile-name">{contactName}</h2>
+                        {contactInfo ? (
+                            <div className="profile-fields">
+                                {contactInfo.bio && <p className="profile-bio">{contactInfo.bio}</p>}
+                                <div className="profile-field"><Mail size={16} /> <span>{contactInfo.email}</span></div>
+                                {contactInfo.phone_number && (
+                                    <div className="profile-field"><Phone size={16} /> <span>{contactInfo.phone_number}</span></div>
+                                )}
+                                {contactInfo.created_at && (
+                                    <div className="profile-field">
+                                        <Calendar size={16} /> <span>Member since {new Date(contactInfo.created_at).toLocaleDateString()}</span>
+                                    </div>
+                                )}
+                                {blocked && <span className="profile-blocked-tag">Blocked</span>}
+                            </div>
+                        ) : (
+                            <p className="profile-loading">Loading…</p>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Message List */}
             <div className="message-list" ref={messageListRef}>
-                {initializing ? (
-                    <div className="loading-messages">
-                        <div className="spinner"></div>
-                        <p>Initializing chat...</p>
-                    </div>
-                ) : error ? (
-                    <div className="no-messages" style={{ flexDirection: 'column', gap: '10px' }}>
-                        <p style={{ color: '#ef4444' }}>{error}</p>
-                        <button
-                            onClick={onLogout}
-                            className="send-button"
-                            style={{ width: 'auto', padding: '10px 20px', borderRadius: '8px' }}
-                        >
-                            Log Out & Reset
-                        </button>
-                    </div>
-                ) : loadingMessages ? (
+                {phase === 'loading' ? (
                     <div className="loading-messages">
                         <div className="spinner"></div>
                         <p>Loading messages...</p>
                     </div>
+                ) : phase === 'error' ? (
+                    <div className="no-messages" style={{ flexDirection: 'column', gap: '10px' }}>
+                        <p style={{ color: '#ef4444' }}>{error}</p>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button
+                                onClick={() => setReloadKey((k) => k + 1)}
+                                className="send-button"
+                                style={{ width: 'auto', padding: '10px 20px', borderRadius: '8px' }}
+                            >
+                                Retry
+                            </button>
+                            <button
+                                onClick={onLogout}
+                                className="send-button"
+                                style={{ width: 'auto', padding: '10px 20px', borderRadius: '8px' }}
+                            >
+                                Log Out
+                            </button>
+                        </div>
+                    </div>
                 ) : (
                     <>
-                        <div className="date-divider">Today</div>
-
                         {messages.length === 0 ? (
                             <div className="no-messages">
                                 <p>No messages yet. Start the conversation!</p>
                             </div>
                         ) : (
-                            messages.map((msg, idx) => (
-                                <div key={idx} className={`message-group ${msg.type}`}>
-                                    {msg.type === 'incoming' && (
-                                        <div className="message-avatar">
-                                            <img
-                                                src={`https://i.pravatar.cc/150?u=${selectedContact.username}`}
-                                                alt="Sender"
-                                                style={{ width: '100%', height: '100%', borderRadius: '50%' }}
-                                            />
-                                        </div>
-                                    )}
+                            messages.map((msg) => {
+                                const type = msg.senderId === user.id ? 'outgoing' : 'incoming';
+                                return (
+                                    <div key={msg.id} className={`message-group ${type}`}>
+                                        {type === 'incoming' && (
+                                            <div className="message-avatar">
+                                                <img
+                                                    src={`https://i.pravatar.cc/150?u=${peer.id}`}
+                                                    alt="Sender"
+                                                    style={{ width: '100%', height: '100%', borderRadius: '50%' }}
+                                                />
+                                            </div>
+                                        )}
 
-                                    <div className="message-content">
-                                        <div className="message-bubble">
-                                            {msg.message}
-                                        </div>
-                                        <div className="message-meta">
-                                            <span>{msg.time}</span>
-                                            {msg.type === 'outgoing' && (
-                                                msg.status === 'delivered' ? (
-                                                    <CheckCheck size={14} className="read-receipt delivered" />
-                                                ) : (
-                                                    <Check size={14} className="read-receipt sent" />
-                                                )
-                                            )}
+                                        <div className="message-content">
+                                            <div className="message-bubble">
+                                                {msg.content}
+                                            </div>
+                                            <div className="message-meta">
+                                                <span>{msg.time}</span>
+                                                {type === 'outgoing' && (
+                                                    msg.status === 'read' ? (
+                                                        <CheckCheck size={14} className="read-receipt delivered" />
+                                                    ) : (
+                                                        <Check size={14} className="read-receipt sent" />
+                                                    )
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            ))
+                                );
+                            })
                         )}
                     </>
                 )}
@@ -446,7 +495,7 @@ const Chat = ({ username, selectedContact, onBack, onLogout, onMessageSent }) =>
                         placeholder="Type a message..."
                         value={input}
                         onChange={handleInputChange}
-                        onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                        onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
                     />
                     <button className="smile-button">
                         <Smile size={24} />

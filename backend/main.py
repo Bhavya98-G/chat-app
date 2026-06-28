@@ -3,9 +3,8 @@ from app.core.database import engine
 from app.models.sql_tables import Base, User
 from app.routes.auth_routers import router as auth_router
 from app.routes.general_route import router as genral_router
-from app.routes.connection import router as connection_router
-from app.routes.message import router as message_router
-from app.routes.person import router as user_router
+from app.routes.chat_ws import router as chat_ws_router
+from app.routes.chat_rest import router as chat_rest_router
 from app.routes.admin_route import router as admin_router
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,10 +24,8 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(genral_router)
 app.include_router(admin_router)
-app.include_router(connection_router)
-app.include_router(message_router)
-app.include_router(user_router) 
-
+app.include_router(chat_rest_router)
+app.include_router(chat_ws_router)
 
 @app.on_event("startup")
 async def init_tables():
@@ -36,10 +33,9 @@ async def init_tables():
         await conn.run_sync(Base.metadata.create_all)
     
     async with AsyncSession(engine) as session:
-        result = await session.execute(select(User).where(User.username == "TexterBot"))
+        result = await session.execute(select(User).where(User.email == "bot@texter.com", User.role == "bot"))
         if not result.scalars().first():
             bot = User(
-                username="TexterBot",
                 first_name="Texter",
                 last_name="Bot",
                 email="bot@texter.com",

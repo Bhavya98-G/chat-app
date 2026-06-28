@@ -1,19 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Search, MessageCircle, ArrowLeft, LogOut, Settings } from 'lucide-react';
-import { API_BASE_URL, API_ENDPOINTS, STORAGE_KEYS } from '../../constants/config';
+import { Users, Search, MessageCircle, ArrowLeft, LogOut, Settings, Bot } from 'lucide-react';
 import BottomNav from '../../components/BottomNav';
+import { listConversations, searchUsers } from '../../services/chatService';
+import { displayName, formatTime } from '../../utils/helpers';
 import './Contacts.css';
 
-const Contacts = ({ onSelectContact, onBack, onLogout, onNewChat, onViewChats, mode = 'all' }) => {
-    // ... (state hooks remain same)
-    const [contacts, setContacts] = useState([]);
+const Contacts = ({ onSelectContact, onBack, onLogout, onNewChat, onViewChats, onOpenSettings, onOpenBot, mode = 'all' }) => {
+    const [items, setItems] = useState([]); // [{ id, name, subtitle }]
     const [searchQuery, setSearchQuery] = useState('');
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(mode === 'recent');
     const [error, setError] = useState(null);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const settingsRef = useRef(null);
-
-    // ... (rest of logic unchanged)
 
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -28,47 +26,62 @@ const Contacts = ({ onSelectContact, onBack, onLogout, onNewChat, onViewChats, m
         };
     }, []);
 
-    useEffect(() => {
-        fetchContacts();
-    }, [mode]);
-
-    const fetchContacts = async () => {
+    const loadConversations = async () => {
         try {
             setLoading(true);
-            const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-            const currentUsername = localStorage.getItem(STORAGE_KEYS.USERNAME);
-
-            const endpoint = mode === 'recent'
-                ? API_ENDPOINTS.USERS.GET_CHAT_USERS(currentUsername)
-                : API_ENDPOINTS.USERS.GET_ALL(currentUsername);
-
-            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to fetch contacts');
-            }
-
-            const data = await response.json();
-            setContacts(data);
             setError(null);
+            const convs = await listConversations();
+            setItems(convs.map((c) => ({
+                id: c.peer_id,
+                name: c.peer_name,
+                subtitle: c.last_message_at ? `Last active ${formatTime(c.last_message_at)}` : '',
+            })));
         } catch (err) {
             setError(err.message);
-            console.error('Error fetching contacts:', err);
         } finally {
             setLoading(false);
         }
     };
 
-    const filteredContacts = contacts.filter(contact =>
-        contact.username.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    useEffect(() => {
+        if (mode === 'recent') loadConversations();
+    }, [mode]);
 
-    const currentUsername = localStorage.getItem(STORAGE_KEYS.USERNAME);
+    const runSearch = async (q) => {
+        try {
+            setLoading(true);
+            const users = await searchUsers(q);
+            setItems(users.map((u) => ({ id: u.id, name: displayName(u), subtitle: u.email })));
+            setError(null);
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // all mode: debounced server-side search
+    useEffect(() => {
+        if (mode !== 'all') return undefined;
+        const q = searchQuery.trim();
+        if (!q) {
+            setItems([]);
+            setError(null);
+            setLoading(false);
+            return undefined;
+        }
+        setLoading(true);
+        const timer = setTimeout(() => runSearch(q), 300);
+        return () => clearTimeout(timer);
+    }, [mode, searchQuery]);
+
+    const visibleItems = mode === 'recent'
+        ? items.filter((i) => i.name.toLowerCase().includes(searchQuery.toLowerCase()))
+        : items;
+
+    // Pin a Texter Bot entry at the top of the recent-chats list (respects search).
+    const showBot = mode === 'recent' && !!onOpenBot
+        && 'texter bot'.includes(searchQuery.trim().toLowerCase());
 
     return (
         <div className="contacts-container">
@@ -80,11 +93,10 @@ const Contacts = ({ onSelectContact, onBack, onLogout, onNewChat, onViewChats, m
                             <ArrowLeft size={24} />
                         </button>
                     )}
-                    <h1>{mode === 'recent' ? 'Chats' : 'Contacts'}</h1>
+                    <h1>{mode === 'recent' ? 'Chats' : 'Find People'}</h1>
                 </div>
 
                 <div className="header-right">
-
                     <div className="settings-container" ref={settingsRef}>
                         <button
                             type="button"
@@ -124,7 +136,7 @@ const Contacts = ({ onSelectContact, onBack, onLogout, onNewChat, onViewChats, m
                 <input
                     type="text"
                     className="search-input"
-                    placeholder="Search contacts..."
+                    placeholder={mode === 'all' ? 'Search people by name or email...' : 'Search chats...'}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -135,54 +147,69 @@ const Contacts = ({ onSelectContact, onBack, onLogout, onNewChat, onViewChats, m
                 {loading ? (
                     <div className="loading-state">
                         <div className="spinner"></div>
-                        <p>Loading contacts...</p>
+                        <p>{mode === 'recent' ? 'Loading chats...' : 'Searching...'}</p>
                     </div>
                 ) : error ? (
                     <div className="error-state">
                         <p className="error-message">{error}</p>
-                        <button className="retry-button" onClick={fetchContacts}>
+                        <button
+                            className="retry-button"
+                            onClick={() => (mode === 'recent' ? loadConversations() : runSearch(searchQuery.trim()))}
+                        >
                             Retry
                         </button>
                     </div>
-                ) : filteredContacts.length === 0 ? (
+                ) : (!showBot && visibleItems.length === 0) ? (
                     <div className="empty-state">
                         <Users size={48} className="empty-icon" />
                         <p className="empty-message">
-                            {searchQuery ? 'No contacts found' : 'No contacts available'}
+                            {mode === 'all'
+                                ? (searchQuery.trim() ? 'No people found' : 'Type a name or email to find people')
+                                : (searchQuery ? 'No chats found' : 'No chats yet')}
                         </p>
                     </div>
                 ) : (
-                    filteredContacts.map((contact) => (
-                        <div
-                            key={contact.id}
-                            className={`contact-item ${contact.username === currentUsername ? 'current-user' : ''}`}
-                            onClick={() => contact.username !== currentUsername && onSelectContact(contact)}
-                        >
-                            <div className="contact-avatar">
-                                <img
-                                    src={`https://i.pravatar.cc/150?u=${contact.username}`}
-                                    alt={contact.username}
-                                />
-                                <div className="status-indicator"></div>
-                            </div>
-                            <div className="contact-info">
-                                <h3 className="contact-name">
-                                    {contact.username}
-                                    {contact.username === currentUsername && (
-                                        <span className="you-badge">You</span>
-                                    )}
-                                </h3>
-                                <p className="contact-status">
-                                    {contact.username === currentUsername ? 'Your account' : 'Available'}
-                                </p>
-                            </div>
-                            {contact.username !== currentUsername && (
+                    <>
+                        {showBot && (
+                            <div
+                                className="contact-item bot-contact-item"
+                                onClick={onOpenBot}
+                            >
+                                <div className="contact-avatar">
+                                    <div className="bot-avatar"><Bot size={24} /></div>
+                                </div>
+                                <div className="contact-info">
+                                    <h3 className="contact-name">Texter Bot</h3>
+                                    <p className="contact-status">AI assistant • always here</p>
+                                </div>
                                 <button className="message-button">
                                     <MessageCircle size={20} />
                                 </button>
-                            )}
-                        </div>
-                    ))
+                            </div>
+                        )}
+                        {visibleItems.map((item) => (
+                            <div
+                                key={item.id}
+                                className="contact-item"
+                                onClick={() => onSelectContact({ id: item.id, name: item.name })}
+                            >
+                                <div className="contact-avatar">
+                                    <img
+                                        src={`https://i.pravatar.cc/150?u=${item.id}`}
+                                        alt={item.name}
+                                    />
+                                    <div className="status-indicator"></div>
+                                </div>
+                                <div className="contact-info">
+                                    <h3 className="contact-name">{item.name}</h3>
+                                    <p className="contact-status">{item.subtitle || 'Available'}</p>
+                                </div>
+                                <button className="message-button">
+                                    <MessageCircle size={20} />
+                                </button>
+                            </div>
+                        ))}
+                    </>
                 )}
             </div>
 
@@ -191,7 +218,7 @@ const Contacts = ({ onSelectContact, onBack, onLogout, onNewChat, onViewChats, m
                 activeTab={mode === 'recent' ? 'chats' : 'contacts'}
                 onChatsClick={() => mode !== 'recent' && onViewChats && onViewChats()}
                 onContactsClick={() => mode === 'recent' && onNewChat && onNewChat()}
-                onSettingsClick={() => { }}
+                onSettingsClick={onOpenSettings}
             />
         </div>
     );

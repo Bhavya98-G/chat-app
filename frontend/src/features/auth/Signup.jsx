@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
-import api from '../../services/api';
 import { Eye, EyeOff, Check } from 'lucide-react';
-import { API_ENDPOINTS } from '../../constants/config';
+import { useAuth } from '../../context/AuthContext';
 import './Signup.css';
 
-const Signup = ({ onSignup, onSwitchToLogin }) => {
-    const [username, setUsername] = useState('');
+const Signup = ({ onSwitchToLogin }) => {
+    const { signup } = useAuth();
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [email, setEmail] = useState('');
@@ -25,34 +24,18 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
             return;
         }
 
-        if (password.length < 6) {
-            setError('Password must be at least 6 characters');
+        if (password.length < 8) {
+            setError('Password must be at least 8 characters');
             return;
         }
 
         setLoading(true);
 
         try {
-            // Call register endpoint
-            // Call register endpoint
-            const response = await api.post(API_ENDPOINTS.AUTH.REGISTER, {
-                username,
-                first_name: firstName,
-                last_name: lastName,
-                email,
-                password
-            });
-
-            // Automatically login after signup (optional, or just switch to login)
-            // For now, let's notify parent
-            onSignup(username);
+            await signup({ firstName, lastName, email, password });
+            // signup auto-logs-in; AuthContext flips status and App leaves this screen
         } catch (err) {
-            console.error(err);
-            if (err.response && err.response.status === 400) {
-                setError('Username already exists');
-            } else {
-                setError('Registration failed. Please try again.');
-            }
+            setError(err.message || 'Registration failed. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -67,27 +50,12 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
             <div className="signup-content">
                 <div className="header-section">
                     <h1 className="signup-title">Create Account</h1>
-
-
-
                     <p className="signup-subtitle">Join the Texter community today</p>
                 </div>
 
                 {error && <div className="error-message">{error}</div>}
 
                 <form onSubmit={handleSubmit} style={{ width: '100%' }}>
-                    <div className="form-group">
-                        <label className="input-label">Username</label>
-                        <input
-                            type="text"
-                            className="input-field"
-                            placeholder="Choose a unique username"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            required
-                        />
-                    </div>
-
                     <div className="form-row">
                         <div className="form-group">
                             <label className="input-label">First Name</label>
@@ -105,10 +73,9 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
                             <input
                                 type="text"
                                 className="input-field"
-                                placeholder="Last Name"
+                                placeholder="Last Name (optional)"
                                 value={lastName}
                                 onChange={(e) => setLastName(e.target.value)}
-                                required
                             />
                         </div>
                     </div>
@@ -181,19 +148,6 @@ const Signup = ({ onSignup, onSwitchToLogin }) => {
                 <p className="terms-text">
                     By signing up, you agree to our <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>.
                 </p>
-
-                <div className="divider">
-                    <span>Or sign up with</span>
-                </div>
-
-                <div className="social-buttons">
-                    <button className="social-btn google">
-                        <span className="social-icon">G</span>
-                    </button>
-                    <button className="social-btn apple">
-                        <span className="social-icon"></span>
-                    </button>
-                </div>
 
                 <div className="login-link">
                     Already have an account? <span onClick={onSwitchToLogin}>Log In</span>

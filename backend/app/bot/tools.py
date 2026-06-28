@@ -1,43 +1,100 @@
+from typing import Annotated
+
 from langchain_core.tools import tool
-from sqlalchemy import select, or_, and_
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.sql_tables import User, Message
+from langgraph.prebuilt import InjectedState
+from sqlalchemy import select, or_, and_, func
+from sqlalchemy.orm import aliased
+
+from app.core.database import AsyncSessionLocal
+from app.models.sql_tables import (
+    User,
+    Contact,
+    Conversation,
+    ConversationMember,
+    Message,
+)
+
+
+def _display_name(user: User) -> str:
+    return f"{user.first_name} {user.last_name or ''}".strip()
 
 
 @tool
-async def get_history_with_contact(user_id: int, contact_username: str):
-    """Fetch the chat history between the user and a specific contact by username."""
-    async with AsyncSession(engine) as db:
-        contact_res = await db.execute(select(User).where(User.username == contact_username))
-        contact = contact_res.scalars().first()
-        if not contact:
-            return f"User {contact_username} not found."
-        query = select(Message).where(
-            or_(
-                and_(Message.sender_id == user_id, Message.receiver_id == contact.id),
-                and_(Message.sender_id == contact.id, Message.receiver_id == user_id)
+async def get_chat_history(
+    contact_name: str,
+    user_id: Annotated[int, InjectedState("user_id")],
+    limit: int = 20,
+) -> str:
+    """Look up the user's recent 1:1 message history with one of their contacts.
+
+    Use this when the user asks what they discussed with someone, or to recall
+    earlier messages. `contact_name` is the other person's name or the nickname
+    the user saved for them (e.g. "Mom", "Alice"). Returns recent messages,
+    oldest first.
+    """
+    like = f"%{contact_name}%"
+    # Two aliases of the membership table: one row proving *I* am in the
+    # conversation, one row for the *other* member (the peer in a direct chat).
+    MeMember = aliased(ConversationMember)
+    PeerMember = aliased(ConversationMember)
+
+    async with AsyncSessionLocal() as db:
+        stmt = (
+            select(Conversation.id, User, Contact.nickname)
+            .join(MeMember, MeMember.conversation_id == Conversation.id)
+            .join(
+                PeerMember,
+                and_(
+                    PeerMember.conversation_id == Conversation.id,
+                    PeerMember.user_id != user_id,
+                ),
             )
-        ).order_by(Message.timestamp)
-        result = await db.execute(query)
-        messages = result.scalars().all()
-        if not messages:
-            return f"No messages found between {user_id} and {contact_username}."
-        return [{"sender": m.sender_id, "content": m.content, "time": str(m.timestamp)} for m in messages]
-        
+            .join(User, User.id == PeerMember.user_id)
+            .outerjoin(
+                Contact,
+                and_(Contact.owner_id == user_id, Contact.contact_id == User.id),
+            )
+            .where(
+                Conversation.type == "direct",
+                MeMember.user_id == user_id,
+                or_(
+                    Contact.nickname.ilike(like),
+                    User.first_name.ilike(like),
+                    User.last_name.ilike(like),
+                    func.concat(User.first_name, " ", User.last_name).ilike(like),
+                ),
+            )
+            .order_by(Conversation.last_message_at.desc())
+            .limit(1)
+        )
+        row = (await db.execute(stmt)).first()
+        if row is None:
+            return f"No conversation found with a contact matching '{contact_name}'."
 
-        
+        conversation_id, peer, nickname = row
+        peer_label = nickname or _display_name(peer)
 
-@tool
-async def get_message_to_user(content: str, target_username: str, sender_id: int):
-    """Send a message to another user on behalf of the current user."""
-    async with AsyncSession(engine) as db:
-        target_res = await db.execute(select(User).where(User.username == target_username))
-        target = target_res.scalars().first()
-        if not target:
-            return f"User {target_username} not found."
-        new_msg = Message(sender_id=sender_id, receiver_id=target.id, content=content)
-        db.add(new_msg)
-        await db.commit()
-        return f"Message sent to {target_username}."
-        
+        msgs = (
+            (
+                await db.execute(
+                    select(Message)
+                    .where(
+                        Message.conversation_id == conversation_id,
+                        Message.is_deleted == False,  # noqa: E712
+                    )
+                    .order_by(Message.created_at.desc(), Message.id.desc())
+                    .limit(limit)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not msgs:
+            return f"You have no messages yet with {peer_label}."
 
+        # Fetched newest-first for the LIMIT; show oldest-first so it reads naturally.
+        lines = [
+            f"{'You' if m.sender_id == user_id else peer_label}: {m.content}"
+            for m in reversed(msgs)
+        ]
+        return f"Recent messages with {peer_label}:\n" + "\n".join(lines)

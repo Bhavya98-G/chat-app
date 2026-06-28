@@ -1,0 +1,37 @@
+# --- Dependencies ---
+node_modules/
+
+# --- Build output ---
+frontend/dist/
+dist-ssr/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# --- Environment / secrets ---
+.env
+.env.*
+!.env.example
+
+# --- Logs ---
+*.log
+npm-debug.log*
+
+# --- Editor / IDE ---
+.vscode/
+.idea/
+
+
+# --- OS ---
+Thumbs.db
+.DS_Store
+
+# --- Test/coverage artifacts ---
+coverage/
+.pytest_cache/
+TEST_CREDENTIALS.md
+
+ui_ux

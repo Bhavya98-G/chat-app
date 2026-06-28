@@ -12,14 +12,17 @@ from app.auth.schemas import (
     RefreshResponse,
     LogoutRequest,
     LogoutResponse,
+    MeResponse,
 )
 from app.auth.services import (
     create_user,
     login_user,
     refresh_access_token,
     revoke_refresh_token,
+    get_current_user,
 )
 from app.core.database import get_db, get_redis
+from app.models.sql_tables import User
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.forgot_password import send_otp, reset_user_password
 import redis.asyncio as redis
@@ -39,6 +42,11 @@ async def login(
     redis_client: redis.Redis = Depends(get_redis),
 ):
     return await login_user(user, db, redis_client)
+
+
+@router.get("/me", response_model=MeResponse)
+async def me(current_user: User = Depends(get_current_user)):
+    return current_user
 
 
 @router.post("/refresh", response_model=RefreshResponse)

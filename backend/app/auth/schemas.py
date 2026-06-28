@@ -49,3 +49,14 @@ class ResetPasswordRequest(BaseModel):
 
 class ResetPasswordResponse(BaseModel):
     message: str
+
+class MeResponse(BaseModel):
+    id: int
+    first_name: str
+    last_name: str | None
+    email: EmailStr
+    role: str
+    bio: str | None = None
+    phone_number: str | None = None
+
+    model_config = {"from_attributes": True}

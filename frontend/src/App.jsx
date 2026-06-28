@@ -1,110 +1,105 @@
 import React, { useState, useEffect } from 'react';
 import { Login, Signup } from './features/auth';
 import { Chat, EmptyChat } from './features/chat';
-import { Contacts } from './features/contacts';
+import { Contacts, ContactBook, NewContactForm } from './features/contacts';
+import { Settings } from './features/settings';
 import { Maintenance } from './features/maintenance';
-import { storage } from './utils/helpers';
-import { STORAGE_KEYS, API_BASE_URL, API_ENDPOINTS } from './constants/config';
+import { useAuth } from './context/AuthContext';
+import { listConversations, getBot } from './services/chatService';
 import useServerHealth from './hooks/useServerHealth';
 import './styles/global.css';
 
 function App() {
-    const [user, setUser] = useState(null);
-    const [activeView, setActiveView] = useState('loading'); // 'loading', 'empty', 'contacts', 'chat', 'recent_chats'
-    const [selectedContact, setSelectedContact] = useState(null);
+    const { user, status, logout } = useAuth();
+    const [activeView, setActiveView] = useState('loading'); // 'loading' | 'empty' | 'recent_chats' | 'contacts' | 'add_contact' | 'settings' | 'chat'
+    const [selectedPeer, setSelectedPeer] = useState(null); // { id, name }
+    const [pendingPerson, setPendingPerson] = useState(null); // person being added (pre-save)
     const [isSignup, setIsSignup] = useState(false);
     const [hasChats, setHasChats] = useState(false);
-
-    // Check server health
+    const [botId, setBotId] = useState(null); // Texter Bot's user id, resolved after auth
     const isServerUp = useServerHealth();
 
+    // When authenticated, land on recent chats if any exist.
     useEffect(() => {
-        const token = storage.get(STORAGE_KEYS.TOKEN);
-        const storedUser = storage.get(STORAGE_KEYS.USERNAME);
-        if (token && storedUser) {
-            setUser(storedUser);
-            checkRecentChats(storedUser);
-        } else {
-            setActiveView('empty');
-        }
-    }, []);
-
-    const checkRecentChats = async (username) => {
-        try {
-            const token = storage.get(STORAGE_KEYS.TOKEN);
-            const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.USERS.GET_CHAT_USERS(username)}`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-            if (response.ok) {
-                const data = await response.json();
-                if (data.length > 0) {
-                    setHasChats(true);
-                    setActiveView('recent_chats');
-                } else {
-                    setHasChats(false);
-                    setActiveView('empty');
-                }
-            } else {
-                setActiveView('empty');
+        if (status !== 'authenticated') return undefined;
+        let cancelled = false;
+        (async () => {
+            try {
+                const convs = await listConversations();
+                if (cancelled) return;
+                setHasChats(convs.length > 0);
+                setActiveView(convs.length > 0 ? 'recent_chats' : 'empty');
+            } catch {
+                if (!cancelled) setActiveView('empty');
             }
-        } catch (error) {
-            console.error("Failed to check recent chats", error);
-            setActiveView('empty');
-        }
-    };
+        })();
+        return () => { cancelled = true; };
+    }, [status]);
 
-    const handleLogin = (username) => {
-        setUser(username);
-        checkRecentChats(username);
-    };
+    // Resolve the bot's id once so any chat with it (from anywhere) is flagged.
+    useEffect(() => {
+        if (status !== 'authenticated') { setBotId(null); return undefined; }
+        let cancelled = false;
+        (async () => {
+            try {
+                const bot = await getBot();
+                if (!cancelled) setBotId(bot.id);
+            } catch { /* bot is optional; ignore if unavailable */ }
+        })();
+        return () => { cancelled = true; };
+    }, [status]);
 
     const handleLogout = () => {
-        // 1. Clear all credentials from browser storage
-        storage.clearAuth();
-
-        // 2. Reset React State
-        setUser(null);
-        setSelectedContact(null);
-        setActiveView('empty');
+        setSelectedPeer(null);
+        setActiveView('loading');
         setIsSignup(false);
         setHasChats(false);
-
-        // 3. Force a page reload to ensure a clean slate
-        window.location.reload();
+        setBotId(null);
+        logout();
     };
 
-    const handleStartChat = () => {
-        setActiveView('contacts');
-    };
-
-    const handleViewContacts = () => {
-        setActiveView('contacts');
-    };
-
-    const handleSelectContact = (contact) => {
-        setSelectedContact(contact);
+    const handleSelectPeer = (peer) => {
+        const isBot = peer.isBot || (botId != null && peer.id === botId);
+        setSelectedPeer({ ...peer, isBot });
         setActiveView('chat');
     };
 
-    const handleBackToDashboard = () => {
-        if (hasChats) {
-            setActiveView('recent_chats');
-        } else {
-            setActiveView('empty');
-        }
-        setSelectedContact(null);
+    // Open (or create) the chat with Texter Bot.
+    const openBotChat = async () => {
+        try {
+            let id = botId;
+            if (id == null) {
+                const bot = await getBot();
+                id = bot.id;
+                setBotId(id);
+            }
+            setSelectedPeer({ id, name: 'Texter Bot', isBot: true });
+            setActiveView('chat');
+        } catch { /* bot unreachable; leave the current view */ }
     };
 
-    const handleBackFromContacts = () => {
-        if (hasChats) {
-            setActiveView('recent_chats');
-        } else {
-            setActiveView('empty');
-        }
+    // Opening a saved contact goes straight to the chat.
+    const openContactChat = (c) => {
+        handleSelectPeer({
+            id: c.contact_id,
+            name: c.nickname || `${c.first_name} ${c.last_name || ''}`.trim(),
+        });
     };
+
+    // Picking a searched person opens the New Contact modal (over the Find
+    // People list) to set a nickname before saving.
+    const handlePickPerson = (person) => {
+        setPendingPerson(person);
+    };
+
+    const backToDashboard = () => {
+        setSelectedPeer(null);
+        setActiveView(hasChats ? 'recent_chats' : 'empty');
+    };
+
+    if (status === 'booting') {
+        return <div className="App" />;
+    }
 
     return (
         <div className="App">
@@ -115,40 +110,69 @@ function App() {
                 </div>
             )}
 
-            {user ? (
+            {status === 'authenticated' && user ? (
                 <>
                     {activeView === 'empty' && (
                         <EmptyChat
-                            onStartChat={handleStartChat}
-                            onViewContacts={handleViewContacts}
+                            onStartChat={() => setActiveView('add_contact')}
+                            onViewContacts={() => setActiveView('contacts')}
+                            onOpenSettings={() => setActiveView('settings')}
+                            onOpenBot={openBotChat}
                             onLogout={handleLogout}
                         />
                     )}
                     {activeView === 'recent_chats' && (
                         <Contacts
                             mode="recent"
-                            onSelectContact={handleSelectContact}
-                            onBack={null} // Back button hidden in recent mode anyway
+                            onSelectContact={handleSelectPeer}
+                            onBack={null}
                             onNewChat={() => setActiveView('contacts')}
-                            onViewChats={() => { }} // Already on chats
+                            onViewChats={() => { }}
+                            onOpenSettings={() => setActiveView('settings')}
+                            onOpenBot={openBotChat}
                             onLogout={handleLogout}
                         />
                     )}
                     {activeView === 'contacts' && (
-                        <Contacts
-                            mode="all"
-                            onSelectContact={handleSelectContact}
-                            onBack={handleBackFromContacts}
-                            onNewChat={() => { }} // Already on contacts
-                            onViewChats={handleBackFromContacts}
-                            onLogout={handleLogout}
+                        <ContactBook
+                            onOpenContact={openContactChat}
+                            onAddContact={() => setActiveView('add_contact')}
+                            onViewChats={backToDashboard}
+                            onOpenSettings={() => setActiveView('settings')}
                         />
                     )}
-                    {activeView === 'chat' && selectedContact && (
+                    {activeView === 'add_contact' && (
+                        <>
+                            <Contacts
+                                mode="all"
+                                onSelectContact={handlePickPerson}
+                                onBack={() => setActiveView('contacts')}
+                                onNewChat={() => { }}
+                                onViewChats={backToDashboard}
+                                onOpenSettings={() => setActiveView('settings')}
+                                onLogout={handleLogout}
+                            />
+                            {pendingPerson && (
+                                <NewContactForm
+                                    person={pendingPerson}
+                                    onBack={() => setPendingPerson(null)}
+                                    onAdded={() => setPendingPerson(null)}
+                                />
+                            )}
+                        </>
+                    )}
+                    {activeView === 'settings' && (
+                        <Settings
+                            onBack={backToDashboard}
+                            onLogout={handleLogout}
+                            onOpenChats={backToDashboard}
+                            onOpenContacts={() => setActiveView('contacts')}
+                        />
+                    )}
+                    {activeView === 'chat' && selectedPeer && (
                         <Chat
-                            username={user}
-                            selectedContact={selectedContact}
-                            onBack={handleBackToDashboard}
+                            peer={selectedPeer}
+                            onBack={backToDashboard}
                             onMessageSent={() => setHasChats(true)}
                             onLogout={handleLogout}
                         />
@@ -156,15 +180,9 @@ function App() {
                 </>
             ) : (
                 isSignup ? (
-                    <Signup
-                        onSignup={() => setIsSignup(false)} // After signup, switch to login (or auto-login if logic changes)
-                        onSwitchToLogin={() => setIsSignup(false)}
-                    />
+                    <Signup onSwitchToLogin={() => setIsSignup(false)} />
                 ) : (
-                    <Login
-                        onLogin={handleLogin}
-                        onSwitchToSignup={() => setIsSignup(true)}
-                    />
+                    <Login onSwitchToSignup={() => setIsSignup(true)} />
                 )
             )}
         </div>

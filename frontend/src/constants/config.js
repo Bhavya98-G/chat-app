@@ -2,40 +2,47 @@
 export const API_BASE_URL = 'http://localhost:8000';
 export const WS_BASE_URL = 'ws://localhost:8000';
 
-// API Endpoints
+// API Endpoints (must match the backend contract — see websocket design spec)
 export const API_ENDPOINTS = {
-    // Health & System
-    HEALTH: {
-        ROOT: '/',
-        CLEAR_DB: '/clear-mysql',
-    },
+    HEALTH: '/health',
 
-    // Authentication
     AUTH: {
-        LOGIN: '/login',
-        REGISTER: '/register',
+        REGISTER: '/auth/register',
+        LOGIN: '/auth/login',
+        REFRESH: '/auth/refresh',
+        LOGOUT: '/auth/logout',
+        ME: '/auth/me',
+        GENERATE_OTP: '/auth/generate_otp',
+        RESET_PASSWORD: '/auth/reset_password',
     },
 
-    // Users
-    USERS: {
-        GET_ALL: (username) => `/user_lists/all_users/${username}`,
-        GET_CHAT_USERS: (username) => `/user_lists/chat_user/${username}`,
+    CHAT: {
+        CONVERSATIONS: '/conversations',
+        MESSAGES: (conversationId) => `/conversations/${conversationId}/messages`,
+        USER_SEARCH: '/users/search',
+        BOT: '/bot',
     },
 
-    // Messages
-    MESSAGES: {
-        GET_HISTORY: (userId, contactId) => `/messages/${userId}/${contactId}`,
+    GENERAL: {
+        CREATE_CONTACT: '/general/create_contact',
+        ALL_CONTACTS: '/general/all_contact',
+        CONTACT: (id) => `/general/contact/${id}`,
+        CHANGE_NICKNAME: '/general/change_nickname',
+        BLOCK_PERSON: '/general/block_person',
+        DELETE_CONTACT: (id) => `/general/delete_contact/${id}`,
+        ADD_NUMBER: '/general/add_number',
+        UPDATE_NUMBER: '/general/update_number',
+        DELETE_NUMBER: '/general/delete_number',
+        ADD_BIO: '/general/add_bio',
+        UPDATE_BIO: '/general/update_bio',
+        DELETE_BIO: '/general/delete_bio',
     },
 
-    // WebSocket
-    WEBSOCKET: {
-        CONNECT: (token) => `${WS_BASE_URL}/ws/${token}`,
-    },
+    WEBSOCKET: (token) => `${WS_BASE_URL}/ws/${token}`,
 };
 
 // Local Storage Keys
 export const STORAGE_KEYS = {
-    TOKEN: 'token',
-    USERNAME: 'username',
-    USER_ID: 'userId',
+    ACCESS_TOKEN: 'access_token',
+    REFRESH_TOKEN: 'refresh_token',
 };

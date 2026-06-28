@@ -220,3 +220,30 @@
 .start-chat-btn:active {
     transform: scale(0.98);
 }
+
+/* Secondary, outlined variant for the assistant entry point. */
+.bot-chat-btn {
+    margin-top: 0.9rem;
+    background: transparent;
+    color: #3b82f6;
+    border: 1.5px solid rgba(59, 130, 246, 0.45);
+    padding: 0.75rem 1.6rem;
+    border-radius: 14px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.bot-chat-btn:hover {
+    background: rgba(59, 130, 246, 0.08);
+    border-color: #3b82f6;
+    transform: translateY(-1px);
+}
+
+.bot-chat-btn:active {
+    transform: scale(0.98);
+}

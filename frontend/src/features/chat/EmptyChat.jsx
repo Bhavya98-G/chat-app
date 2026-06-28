@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Settings, MessageCircle, LogOut } from 'lucide-react';
+import { Settings, MessageCircle, LogOut, Bot } from 'lucide-react';
 import BottomNav from '../../components/BottomNav';
 import './EmptyChat.css';
 
-const EmptyChat = ({ onStartChat, onViewContacts, onLogout }) => {
+const EmptyChat = ({ onStartChat, onViewContacts, onOpenSettings, onOpenBot, onLogout }) => {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const settingsRef = useRef(null);
 
@@ -73,13 +73,20 @@ const EmptyChat = ({ onStartChat, onViewContacts, onLogout }) => {
                     <MessageCircle size={24} fill="white" />
                     Start Chatting
                 </button>
+
+                {onOpenBot && (
+                    <button className="bot-chat-btn" onClick={onOpenBot}>
+                        <Bot size={20} />
+                        Chat with Texter Bot
+                    </button>
+                )}
             </div>
 
             <BottomNav
                 activeTab="chats"
                 onChatsClick={() => { }}
                 onContactsClick={onViewContacts}
-                onSettingsClick={() => { }}
+                onSettingsClick={onOpenSettings}
             />
         </div>
     );

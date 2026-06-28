@@ -77,12 +77,20 @@ async def create_contact(
 async def get_all_contact(user_id: int, db: AsyncSession) -> list[GetAllContact]:
     try:
         result = await db.execute(
-            select(Contact).where(Contact.owner_id == user_id)
+            select(Contact, User)
+            .join(User, User.id == Contact.contact_id)
+            .where(Contact.owner_id == user_id)
+            .order_by(User.first_name)
         )
-        contacts = result.scalars().all()
         return [
-            GetAllContact(contact_id=c.contact_id, nickname=c.nickname)
-            for c in contacts
+            GetAllContact(
+                contact_id=c.contact_id,
+                nickname=c.nickname,
+                first_name=u.first_name,
+                last_name=u.last_name,
+                is_blocked=c.is_blocked,
+            )
+            for c, u in result.all()
         ]
     except Exception:
         await db.rollback()
@@ -95,7 +103,7 @@ async def get_all_contact(user_id: int, db: AsyncSession) -> list[GetAllContact]
 async def get_contact(owner_id: int, contact_id: int, db: AsyncSession) -> GetContact:
     try:
         result = await db.execute(
-            select(User, Contact.nickname)
+            select(User, Contact.nickname, Contact.is_blocked)
             .outerjoin(
                 Contact,
                 (Contact.contact_id == User.id) & (Contact.owner_id == owner_id),
@@ -108,7 +116,7 @@ async def get_contact(owner_id: int, contact_id: int, db: AsyncSession) -> GetCo
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found",
             )
-        user, nickname = row
+        user, nickname, is_blocked = row
         return GetContact(
             nickname=nickname if nickname is not None else None,
             first_name=user.first_name,
@@ -117,6 +125,7 @@ async def get_contact(owner_id: int, contact_id: int, db: AsyncSession) -> GetCo
             phone_number=user.phone_number,
             bio=user.bio,
             created_at=user.created_at,
+            is_blocked=bool(is_blocked),
         )
     except HTTPException:
         raise
